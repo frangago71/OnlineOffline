@@ -2,7 +2,7 @@
 import React, { useContext, useEffect, useState } from 'react'
 import { StyleSheet, FlatList, Pressable, View } from 'react-native'
 
-import { getAll, remove } from '../../api/RestaurantEndpoints'
+import { getAll, remove, changeStatus } from '../../api/RestaurantEndpoints'
 import ImageCard from '../../components/ImageCard'
 import TextSemiBold from '../../components/TextSemibold'
 import TextRegular from '../../components/TextRegular'
@@ -12,11 +12,15 @@ import { AuthorizationContext } from '../../context/AuthorizationContext'
 import { showMessage } from 'react-native-flash-message'
 import DeleteModal from '../../components/DeleteModal'
 import restaurantLogo from '../../../assets/restaurantLogo.jpeg'
+import StatusModal from '../../components/StatusModal'
+
 
 export default function RestaurantsScreen ({ navigation, route }) {
   const [restaurants, setRestaurants] = useState([])
   const [restaurantToBeDeleted, setRestaurantToBeDeleted] = useState(null)
   const { loggedInUser } = useContext(AuthorizationContext)
+  const [restaurantToBeChangedStatus, setRestaurantsToBechangedStatus] = useState(null)
+
 
   useEffect(() => {
     if (loggedInUser) {
@@ -35,6 +39,10 @@ export default function RestaurantsScreen ({ navigation, route }) {
           navigation.navigate('RestaurantDetailScreen', { id: item.id })
         }}
       >
+        <TextSemiBold>This restaurant is
+        <TextSemiBold textStyle={{ color: GlobalStyles.brandPrimary }}> {item.status}</TextSemiBold>
+        </TextSemiBold>
+
         <TextRegular numberOfLines={2}>{item.description}</TextRegular>
         {item.averageServiceMinutes !== null &&
           <TextSemiBold>Avg. service time: <TextSemiBold textStyle={{ color: GlobalStyles.brandPrimary }}>{item.averageServiceMinutes} min.</TextSemiBold></TextSemiBold>
@@ -61,7 +69,7 @@ export default function RestaurantsScreen ({ navigation, route }) {
         </Pressable>
 
         <Pressable
-            onPress={() => { setRestaurantToBeDeleted(item) }}
+            onPress={() => { setRestaurantsToBechangedStatus(item) }}
             style={({ pressed }) => [
               {
                 backgroundColor: pressed
@@ -77,6 +85,29 @@ export default function RestaurantsScreen ({ navigation, route }) {
             </TextRegular>
           </View>
         </Pressable>
+        {(item.status === 'offline' || item.status === 'online') &&
+        <Pressable
+            onPress={() => { setRestaurantsToBechangedStatus(item) }}
+            style={({ pressed }) => [
+              {
+                backgroundColor: pressed
+                  ? GlobalStyles.brandSuccess
+                  : GlobalStyles.brandSuccessDisabled
+              },
+              styles.actionButton
+            ]}>
+          <View style={[{ flex: 1, flexDirection: 'row', justifyContent: 'center' }]}>
+            <MaterialCommunityIcons name='refresh' color={'white'} size={20}/>
+            {item.status === 'offline' &&
+            <TextRegular textStyle={styles.text}>
+              online
+            </TextRegular>}
+            {item.status === 'online' &&
+            <TextRegular textStyle={styles.text}>
+              offline
+            </TextRegular>}
+          </View>
+        </Pressable>}
         </View>
       </ImageCard>
     )
@@ -153,6 +184,29 @@ export default function RestaurantsScreen ({ navigation, route }) {
     }
   }
 
+  const changeRestatuantStatus = async (restaurant) => {
+    try {
+      await changeStatus(restaurant.id)
+      await fetchRestaurants()
+      setRestaurantsToBechangedStatus(null)
+      showMessage({
+        message: `Restaurant ${restaurant.name} status succesfully changed`,
+        type: 'success',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    } catch (error) {
+      console.log(error)
+      setRestaurantsToBechangedStatus(null)
+      showMessage({
+        message: `Restaurant ${restaurant.name} status could not be changed.`,
+        type: 'error',
+        style: GlobalStyles.flashStyle,
+        titleStyle: GlobalStyles.flashTextStyle
+      })
+    }
+  }
+
   return (
     <>
     <FlatList
@@ -163,6 +217,12 @@ export default function RestaurantsScreen ({ navigation, route }) {
       ListHeaderComponent={renderHeader}
       ListEmptyComponent={renderEmptyRestaurantsList}
     />
+    <StatusModal
+      isVisible={restaurantToBeChangedStatus !== null}
+      onCancel={() => setRestaurantsToBechangedStatus(null)}
+      onConfirm={() => changeRestatuantStatus(restaurantToBeChangedStatus)}>
+        <TextRegular>The restaurant status will be changed</TextRegular>
+    </StatusModal>
     <DeleteModal
       isVisible={restaurantToBeDeleted !== null}
       onCancel={() => setRestaurantToBeDeleted(null)}
@@ -201,7 +261,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     bottom: 5,
     position: 'absolute',
-    width: '90%'
+    width: '60%'
   },
   text: {
     fontSize: 16,
